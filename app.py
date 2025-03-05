@@ -1,16 +1,22 @@
-import streamlit as st
+# Always make json available
+import json
+import threadingimport streamlit as st
 import pandas as pd
 import numpy as np
 import time
 import random
 from datetime import datetime
-import paho.mqtt.client as mqtt
-import json
-import threading
 # For WiFi management simulation
 import socket
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple
+
+# Try to import paho.mqtt, but make it optional
+try:
+    import paho.mqtt.client as mqtt
+    MQTT_AVAILABLE = True
+except ImportError:
+    MQTT_AVAILABLE = False
 
 # Set page config
 st.set_page_config(
@@ -368,6 +374,11 @@ def on_message(client, userdata, msg):
                     add_activity(f"{door.capitalize()} door {status} via MQTT", "security")
 
 def connect_mqtt():
+    """Connect to MQTT broker if the library is available"""
+    if not MQTT_AVAILABLE:
+        add_activity("MQTT functionality is not available. Install paho-mqtt to enable.", "alert")
+        return False
+        
     # Disconnect if already connected
     if st.session_state.mqtt_client is not None:
         st.session_state.mqtt_client.disconnect()
@@ -396,6 +407,10 @@ def connect_mqtt():
 
 # Function to publish MQTT message
 def publish_mqtt(topic, payload):
+    if not MQTT_AVAILABLE:
+        add_activity("MQTT functionality is not available. Install paho-mqtt to enable.", "alert")
+        return False
+        
     if st.session_state.mqtt_connected and st.session_state.mqtt_client is not None:
         try:
             if isinstance(payload, (dict, list)):
@@ -417,7 +432,7 @@ def publish_mqtt(topic, payload):
         add_activity("Cannot publish: MQTT not connected", "alert")
         return False
 
-# Update functions to also send MQTT messages
+# Update functions to also send MQTT messages if available
 
 # Modified function to toggle lights with MQTT
 def toggle_light(room):
@@ -425,10 +440,11 @@ def toggle_light(room):
     status = "on" if st.session_state.lights[room] else "off"
     add_activity(f"{room.capitalize()} light turned {status}", "light")
     
-    # Publish to MQTT
-    topic = f"{st.session_state.mqtt_topics['lights']}/{room}"
-    payload = {"room": room, "status": st.session_state.lights[room]}
-    publish_mqtt(topic, payload)
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['lights']}/{room}"
+        payload = {"room": room, "status": st.session_state.lights[room]}
+        publish_mqtt(topic, payload)
 
 # Modified function to change thermostat with MQTT
 def update_thermostat(new_value):
@@ -436,14 +452,29 @@ def update_thermostat(new_value):
     st.session_state.thermostat = new_value
     add_activity(f"Thermostat changed from {old_value}°C to {new_value}°C", "thermostat")
     
-    # Publish to MQTT
-    topic = f"{st.session_state.mqtt_topics['thermostat']}/set"
-    payload = {"value": new_value, "unit": "celsius"}
-    publish_mqtt(topic, payload)
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['thermostat']}/set"
+        payload = {"value": new_value, "unit": "celsius"}
+        publish_mqtt(topic, payload)
     
     # Check if thermostat is set too high
     if new_value > 28 and not any("Thermostat set very high" in alert for alert in st.session_state.alerts):
         st.session_state.alerts.append(f"Thermostat set very high: {new_value}°C")
+
+# Modified function to change fan speed with MQTT
+def update_fan_speed(new_speed):
+    old_speed = st.session_state.fan_speed
+    st.session_state.fan_speed = new_speed
+    speed_name = "Off" if new_speed == 0 else f"Level {new_speed}"
+    old_speed_name = "Off" if old_speed == 0 else f"Level {old_speed}"
+    add_activity(f"Fan speed changed from {old_speed_name} to {speed_name}", "fan")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['thermostat']}/fan"
+        payload = {"speed": new_speed, "name": speed_name}
+        publish_mqtt(topic, payload)
 
 # Modified function to update door status with MQTT
 def update_door(door, status):
@@ -451,10 +482,11 @@ def update_door(door, status):
     st.session_state.door_status[door] = status
     add_activity(f"{door.capitalize()} door {status}", "security")
     
-    # Publish to MQTT
-    topic = f"{st.session_state.mqtt_topics['doors']}/{door}"
-    payload = {"door": door, "status": status}
-    publish_mqtt(topic, payload)
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['doors']}/{door}"
+        payload = {"door": door, "status": status}
+        publish_mqtt(topic, payload)
     
     # Add alert if door is opened while security system is armed
     if status == "open" and st.session_state.security_system != "disarmed":
@@ -468,13 +500,14 @@ def update_security_system(new_status):
     st.session_state.security_system = new_status
     add_activity(f"Security system changed from {old_status} to {new_status}", "security")
     
-    # Publish to MQTT
-    topic = f"{st.session_state.mqtt_topics['security']}/mode"
-    payload = {"mode": new_status}
-    publish_mqtt(topic, payload)
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['security']}/mode"
+        payload = {"mode": new_status}
+        publish_mqtt(topic, payload)
 
-# Connect to MQTT if not already connected
-if not st.session_state.mqtt_connected:
+# Connect to MQTT if available and not already connected
+if MQTT_AVAILABLE and not st.session_state.mqtt_connected:
     connect_mqtt()
 
 # WiFi Functions
@@ -583,13 +616,17 @@ st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>Last
 # Display connection statuses
 wifi_status = "🟢 Connected" if st.session_state.wifi_connected else "🔴 Disconnected"
 wifi_details = f" ({st.session_state.wifi_ssid})" if st.session_state.wifi_connected else ""
-mqtt_status = "🟢 Connected" if st.session_state.mqtt_connected else "🔴 Disconnected"
 
 status_cols = st.columns(2)
 with status_cols[0]:
     st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>WiFi Status: {wifi_status}{wifi_details}</p>", unsafe_allow_html=True)
+    
 with status_cols[1]:
-    st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT Status: {mqtt_status}</p>", unsafe_allow_html=True)
+    if MQTT_AVAILABLE:
+        mqtt_status = "🟢 Connected" if st.session_state.mqtt_connected else "🔴 Disconnected"
+        st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT Status: {mqtt_status}</p>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT: Not Available</p>", unsafe_allow_html=True)
 
 # Update data every 3 seconds
 update_sensors()
@@ -999,19 +1036,124 @@ elif st.session_state.current_tab == "Settings":
     # Temperature units
     temp_unit = st.radio("Temperature Units", ["Celsius (°C)", "Fahrenheit (°F)"])
     
-    # MQTT Settings
+    # MQTT Settings - only if MQTT is available
+    if MQTT_AVAILABLE:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.subheader("🔌 MQTT Connection Settings")
+        
+        mqtt_cols = st.columns([2, 1])
+        with mqtt_cols[0]:
+            new_broker = st.text_input("MQTT Broker", value=st.session_state.mqtt_broker)
+            new_port = st.number_input("MQTT Port", min_value=1, max_value=65535, value=st.session_state.mqtt_port)
+            new_username = st.text_input("MQTT Username (optional)", value=st.session_state.mqtt_username)
+            new_password = st.text_input("MQTT Password (optional)", value=st.session_state.mqtt_password, type="password")
+        
+        with mqtt_cols[1]:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if st.button("Connect MQTT", use_container_width=True):
+                # Update connection details
+                st.session_state.mqtt_broker = new_broker
+                st.session_state.mqtt_port = new_port
+                st.session_state.mqtt_username = new_username
+                st.session_state.mqtt_password = new_password
+                
+                # Try to connect with new settings
+                if connect_mqtt():
+                    st.success("MQTT connection established!")
+                else:
+                    st.error("Failed to connect to MQTT broker")
+        
+        # MQTT Topics
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.subheader("📡 MQTT Topics")
+        
+        for name, topic in st.session_state.mqtt_topics.items():
+            st.text_input(f"{name.capitalize()} Topic", value=topic, key=f"topic_{name}")
+        
+        if st.button("Save Topics"):
+            # Update topics from inputs
+            for name in st.session_state.mqtt_topics.keys():
+                st.session_state.mqtt_topics[name] = st.session_state[f"topic_{name}"]
+            st.success("MQTT topics updated successfully!")
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.info("MQTT functionality is not available. To enable MQTT features, install the paho-mqtt library with: `pip install paho-mqtt`")
+    
+    # Notification settings
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("🔌 MQTT Connection Settings")
+    st.subheader("📳 Notification Settings")
     
-    mqtt_cols = st.columns([2, 1])
-    with mqtt_cols[0]:
-        new_broker = st.text_input("MQTT Broker", value=st.session_state.mqtt_broker)
-        new_port = st.number_input("MQTT Port", min_value=1, max_value=65535, value=st.session_state.mqtt_port)
-        new_username = st.text_input("MQTT Username (optional)", value=st.session_state.mqtt_username)
-        new_password = st.text_input("MQTT Password (optional)", value=st.session_state.mqtt_password, type="password")
+    notification_types = {
+        "Security alerts": True,
+        "Temperature warnings": True,
+        "Motion detection": False,
+        "Energy usage reports": True
+    }
     
-    with mqtt_cols[1]:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+    for alert_type, default in notification_types.items():
+        st.checkbox(alert_type, value=default)
+    
+    # User profiles
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("👤 User Profiles")
+    
+    profiles = ["Admin", "Family Member", "Guest"]
+    selected_profile = st.selectbox("Select profile to edit", profiles)
+    
+    if selected_profile:
+        profile_cols = st.columns(2)
+        with profile_cols[0]:
+            st.text_input("Name", value=selected_profile)
+        with profile_cols[1]:
+            st.selectbox("Access Level", ["Full Access", "Limited Access", "Basic Access"])
+    
+    # Backup and restore
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("💾 Backup & Restore")
+    
+    backup_cols = st.columns(2)
+    with backup_cols[0]:
+        if st.button("Backup Configuration", use_container_width=True):
+            st.success("Configuration backed up successfully!")
+    with backup_cols[1]:
+        if st.button("Restore Configuration", use_container_width=True):
+            st.info("Select a backup file to restore")
+            st.file_uploader("Upload backup file", type=["json"])
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # MQTT Message Log - only show if MQTT is available
+    if MQTT_AVAILABLE:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("📩 MQTT Message Log")
+        
+        if not st.session_state.mqtt_messages:
+            st.markdown("<p style='color: gray; font-style: italic;'>No MQTT messages received</p>", unsafe_allow_html=True)
+        else:
+            for msg in st.session_state.mqtt_messages[:10]:  # Show only the last 10 messages
+                st.markdown(
+                    f"<div class='log-entry' style='border-color: #4299e1;'><b>Topic:</b> {msg['topic']} <br>"
+                    f"<b>Payload:</b> {str(msg['payload'])} <br>"
+                    f"<span style='color: gray; font-size: 0.8rem;'>{msg['time']}</span></div>",
+                    unsafe_allow_html=True
+                )
+        
+        mqtt_cols = st.columns(3)
+        with mqtt_cols[0]:
+            custom_topic = st.text_input("Topic", placeholder="Enter MQTT topic")
+        with mqtt_cols[1]:
+            custom_payload = st.text_input("Payload", placeholder="Enter payload")
+        with mqtt_cols[2]:
+            if st.button("Publish", use_container_width=True):
+                if custom_topic and custom_payload:
+                    if publish_mqtt(custom_topic, custom_payload):
+                        st.success(f"Message published to {custom_topic}")
+                    else:
+                        st.error("Failed to publish message")
+                else:
+                    st.error("Topic and payload are required")
+        
+        st.markdown("</div>", unsafe_allow_html=True)", unsafe_allow_html=True)
         if st.button("Connect MQTT", use_container_width=True):
             # Update connection details
             st.session_state.mqtt_broker = new_broker
@@ -1130,6 +1272,7 @@ else:
             "system": "#718096",
             "security": "#9f7aea",
             "irrigation": "#38b2ac",
+            "sensor": "#dd6b20",
             "info": "#a0aec0"
         }.get(entry["type"], "#a0aec0")
         
@@ -1140,6 +1283,15 @@ else:
         )
 
 st.markdown("</div>", unsafe_allow_html=True)
+
+# Note for users about MQTT
+if not MQTT_AVAILABLE:
+    st.info("""
+    📌 **Note:** MQTT functionality is disabled because the paho-mqtt library is not installed. 
+    If you want to connect to IoT devices via MQTT, install it with: `pip install paho-mqtt`
+    
+    The dashboard will still function normally without MQTT capabilities.
+    """)
 
 # Auto-refresh the app
 st.empty()
