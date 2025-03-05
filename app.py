@@ -1122,7 +1122,7 @@ elif st.session_state.current_tab == "Settings":
     
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # MQTT Message Log - only show if MQTT is available
+        # MQTT Message Log - only show if MQTT is available
     if MQTT_AVAILABLE:
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.subheader("📩 MQTT Message Log")
@@ -1153,7 +1153,12 @@ elif st.session_state.current_tab == "Settings":
                 else:
                     st.error("Topic and payload are required")
         
-        st.markdown("</div>", unsafe_allow_html=True)", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.info("MQTT functionality is not available. To enable MQTT features, install the paho-mqtt library with: `pip install paho-mqtt`")
+    
+    st.markdown("</div>", unsafe_allow_html=True)", unsafe_allow_html=True)
         if st.button("Connect MQTT", use_container_width=True):
             # Update connection details
             st.session_state.mqtt_broker = new_broker
