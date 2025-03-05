@@ -1,3 +1,11 @@
+# Activity Log (shown on all tabs)
+st.write("📝 Recent Activity")
+
+if not st.session_state.activity_log:
+    st.write("No recent activity")
+else:
+    for entry in st.session_state.activity_log:
+        st.write(f"{entry['message']} ({entry['time']})")
 # Always make json available
 import json
 import threadingimport streamlit as st
@@ -1260,35 +1268,6 @@ elif st.session_state.current_tab == "Settings":
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Activity Log (shown on all tabs)
-st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("📝 Recent Activity")
-
-if not st.session_state.activity_log:
-    st.markdown("<p style='color: gray; font-style: italic;'>No recent activity</p>", unsafe_allow_html=True)
-else:
-    for entry in st.session_state.activity_log:
-        color = {
-            "alert": "#f56565",
-            "motion": "#48bb78",
-            "light": "#ecc94b",
-            "thermostat": "#4299e1",
-            "fan": "#805ad5",
-            "system": "#718096",
-            "security": "#9f7aea",
-            "irrigation": "#38b2ac",
-            "sensor": "#dd6b20",
-            "info": "#a0aec0"
-        }.get(entry["type"], "#a0aec0")
-        
-        st.markdown(
-            f"<div class='log-entry' style='border-color: {color};'>{entry['message']} "
-            f"<span style='color: gray; font-size: 0.8rem;'>{entry['time']}</span></div>",
-            unsafe_allow_html=True
-        )
-
-st.markdown("</div>", unsafe_allow_html=True)
-
 # Note for users about MQTT
 if not MQTT_AVAILABLE:
     st.info("""
@@ -1299,6 +1278,5 @@ if not MQTT_AVAILABLE:
     """)
 
 # Auto-refresh the app
-st.empty()
 time.sleep(3)  # Wait for 3 seconds
 st.experimental_rerun()
