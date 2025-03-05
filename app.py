@@ -318,7 +318,7 @@ if st.session_state.alerts:
         st.experimental_rerun()
 
 # Create tabs using buttons
-tabs = ["Dashboard", "Security", "Energy", "Irrigation", "WiFi", "Settings"]
+tabs = ["Dashboard", "Security", "Energy", "Irrigation", "WiFi"]
 cols = st.columns(len(tabs))
 for i, tab in enumerate(tabs):
     active_class = "tab-button-active" if st.session_state.current_tab == tab else ""
@@ -584,6 +584,11 @@ elif st.session_state.current_tab == "WiFi":
     # Sort networks by signal strength
     sorted_networks = sorted(st.session_state.available_networks, key=lambda x: x['signal'], reverse=True)
     
+    # Replace HTML tags in network names with proper display
+    for network in st.session_state.available_networks:
+        if '<b>' in network['name'] or '</b>' in network['name']:
+            network['name'] = network['name'].replace('<b>', '').replace('</b>', '')
+    
     for network in sorted_networks:
         # Determine the CSS class for the network item
         network_class = "wifi-network"
@@ -605,7 +610,7 @@ elif st.session_state.current_tab == "WiFi":
         
         net_cols = st.columns([3, 1])
         with net_cols[0]:
-            st.markdown(f"<b>{network['name']}</b> ({network['security']})")
+            st.markdown(f"<b>{network['name']}</b> ({network['security']})", unsafe_allow_html=True)
             if network['connected']:
                 st.markdown("<span style='color: green; font-size: 0.8rem;'>✓ Connected</span>", unsafe_allow_html=True)
         with net_cols[1]:
