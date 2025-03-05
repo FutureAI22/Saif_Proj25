@@ -4,6 +4,9 @@ import numpy as np
 import time
 import random
 from datetime import datetime
+import paho.mqtt.client as mqtt
+import json
+import threading
 
 # Set page config
 st.set_page_config(
@@ -11,6 +14,33 @@ st.set_page_config(
     page_icon="🏠",
     layout="wide"
 )
+
+# MQTT Configuration
+if 'mqtt_client' not in st.session_state:
+    st.session_state.mqtt_client = None
+if 'mqtt_connected' not in st.session_state:
+    st.session_state.mqtt_connected = False
+if 'mqtt_broker' not in st.session_state:
+    st.session_state.mqtt_broker = "broker.hivemq.com"  # Default public broker
+if 'mqtt_port' not in st.session_state:
+    st.session_state.mqtt_port = 1883
+if 'mqtt_username' not in st.session_state:
+    st.session_state.mqtt_username = ""
+if 'mqtt_password' not in st.session_state:
+    st.session_state.mqtt_password = ""
+if 'mqtt_messages' not in st.session_state:
+    st.session_state.mqtt_messages = []
+if 'mqtt_topics' not in st.session_state:
+    st.session_state.mqtt_topics = {
+        "temperature": "home/sensors/temperature",
+        "humidity": "home/sensors/humidity",
+        "motion": "home/sensors/motion",
+        "lights": "home/lights",
+        "thermostat": "home/climate/thermostat",
+        "security": "home/security/status",
+        "doors": "home/security/doors",
+        "irrigation": "home/irrigation"
+    }
 
 # Initialize session state variables if they don't exist
 if 'temperature' not in st.session_state:
@@ -229,9 +259,191 @@ def update_sensors():
     # Update timestamp
     st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
 
+# MQTT Connection Functions
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        st.session_state.mqtt_connected = True
+        add_activity("Connected to MQTT broker", "system")
+        
+        # Subscribe to all topics
+        for topic in st.session_state.mqtt_topics.values():
+            client.subscribe(f"{topic}/#")
+        
+        add_activity(f"Subscribed to topics", "system")
+    else:
+        st.session_state.mqtt_connected = False
+        add_activity(f"Failed to connect to MQTT broker, return code: {rc}", "alert")
+
+def on_message(client, userdata, msg):
+    topic = msg.topic
+    try:
+        payload = json.loads(msg.payload.decode())
+    except:
+        payload = msg.payload.decode()
+    
+    # Add message to log
+    st.session_state.mqtt_messages.insert(0, {"topic": topic, "payload": payload, "time": datetime.now().strftime("%H:%M:%S")})
+    if len(st.session_state.mqtt_messages) > 20:
+        st.session_state.mqtt_messages.pop()
+    
+    # Process message based on topic
+    if topic.startswith(st.session_state.mqtt_topics["temperature"]):
+        if isinstance(payload, dict) and "value" in payload:
+            st.session_state.temperature = float(payload["value"])
+            add_activity(f"Temperature updated from IoT sensor: {payload['value']}°C", "sensor")
+    
+    elif topic.startswith(st.session_state.mqtt_topics["humidity"]):
+        if isinstance(payload, dict) and "value" in payload:
+            st.session_state.humidity = float(payload["value"])
+            add_activity(f"Humidity updated from IoT sensor: {payload['value']}%", "sensor")
+    
+    elif topic.startswith(st.session_state.mqtt_topics["motion"]):
+        if isinstance(payload, dict) and "detected" in payload:
+            motion_detected = bool(payload["detected"])
+            if motion_detected and not st.session_state.motion:
+                st.session_state.motion = True
+                add_activity("Motion detected by IoT sensor", "motion")
+            elif not motion_detected and st.session_state.motion:
+                st.session_state.motion = False
+    
+    elif topic.startswith(st.session_state.mqtt_topics["lights"]):
+        if isinstance(payload, dict) and "room" in payload and "status" in payload:
+            room = payload["room"]
+            status = payload["status"]
+            if room in st.session_state.lights:
+                old_status = st.session_state.lights[room]
+                st.session_state.lights[room] = bool(status)
+                if old_status != st.session_state.lights[room]:
+                    status_str = "on" if st.session_state.lights[room] else "off"
+                    add_activity(f"{room.capitalize()} light turned {status_str} via MQTT", "light")
+    
+    elif topic.startswith(st.session_state.mqtt_topics["doors"]):
+        if isinstance(payload, dict) and "door" in payload and "status" in payload:
+            door = payload["door"]
+            status = payload["status"]
+            if door in st.session_state.door_status:
+                old_status = st.session_state.door_status[door]
+                st.session_state.door_status[door] = status
+                if old_status != status:
+                    add_activity(f"{door.capitalize()} door {status} via MQTT", "security")
+
+def connect_mqtt():
+    # Disconnect if already connected
+    if st.session_state.mqtt_client is not None:
+        st.session_state.mqtt_client.disconnect()
+        st.session_state.mqtt_connected = False
+    
+    # Create new client
+    client_id = f"streamlit-mqtt-{random.randint(0, 1000)}"
+    client = mqtt.Client(client_id=client_id)
+    
+    # Set credentials if provided
+    if st.session_state.mqtt_username and st.session_state.mqtt_password:
+        client.username_pw_set(st.session_state.mqtt_username, st.session_state.mqtt_password)
+    
+    # Set callbacks
+    client.on_connect = on_connect
+    client.on_message = on_message
+    
+    try:
+        client.connect(st.session_state.mqtt_broker, st.session_state.mqtt_port, 60)
+        client.loop_start()
+        st.session_state.mqtt_client = client
+        return True
+    except Exception as e:
+        add_activity(f"MQTT connection error: {str(e)}", "alert")
+        return False
+
+# Function to publish MQTT message
+def publish_mqtt(topic, payload):
+    if st.session_state.mqtt_connected and st.session_state.mqtt_client is not None:
+        try:
+            if isinstance(payload, (dict, list)):
+                payload_str = json.dumps(payload)
+            else:
+                payload_str = str(payload)
+            
+            result = st.session_state.mqtt_client.publish(topic, payload_str)
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                add_activity(f"Published to {topic}", "system")
+                return True
+            else:
+                add_activity(f"Failed to publish to {topic}, rc={result.rc}", "alert")
+                return False
+        except Exception as e:
+            add_activity(f"MQTT publish error: {str(e)}", "alert")
+            return False
+    else:
+        add_activity("Cannot publish: MQTT not connected", "alert")
+        return False
+
+# Update functions to also send MQTT messages
+
+# Modified function to toggle lights with MQTT
+def toggle_light(room):
+    st.session_state.lights[room] = not st.session_state.lights[room]
+    status = "on" if st.session_state.lights[room] else "off"
+    add_activity(f"{room.capitalize()} light turned {status}", "light")
+    
+    # Publish to MQTT
+    topic = f"{st.session_state.mqtt_topics['lights']}/{room}"
+    payload = {"room": room, "status": st.session_state.lights[room]}
+    publish_mqtt(topic, payload)
+
+# Modified function to change thermostat with MQTT
+def update_thermostat(new_value):
+    old_value = st.session_state.thermostat
+    st.session_state.thermostat = new_value
+    add_activity(f"Thermostat changed from {old_value}°C to {new_value}°C", "thermostat")
+    
+    # Publish to MQTT
+    topic = f"{st.session_state.mqtt_topics['thermostat']}/set"
+    payload = {"value": new_value, "unit": "celsius"}
+    publish_mqtt(topic, payload)
+    
+    # Check if thermostat is set too high
+    if new_value > 28 and not any("Thermostat set very high" in alert for alert in st.session_state.alerts):
+        st.session_state.alerts.append(f"Thermostat set very high: {new_value}°C")
+
+# Modified function to update door status with MQTT
+def update_door(door, status):
+    old_status = st.session_state.door_status[door]
+    st.session_state.door_status[door] = status
+    add_activity(f"{door.capitalize()} door {status}", "security")
+    
+    # Publish to MQTT
+    topic = f"{st.session_state.mqtt_topics['doors']}/{door}"
+    payload = {"door": door, "status": status}
+    publish_mqtt(topic, payload)
+    
+    # Add alert if door is opened while security system is armed
+    if status == "open" and st.session_state.security_system != "disarmed":
+        alert_message = f"Security alert: {door} door opened while system armed!"
+        st.session_state.alerts.append(alert_message)
+        add_activity(alert_message, "alert")
+
+# Modified function to update security system with MQTT
+def update_security_system(new_status):
+    old_status = st.session_state.security_system
+    st.session_state.security_system = new_status
+    add_activity(f"Security system changed from {old_status} to {new_status}", "security")
+    
+    # Publish to MQTT
+    topic = f"{st.session_state.mqtt_topics['security']}/mode"
+    payload = {"mode": new_status}
+    publish_mqtt(topic, payload)
+
+# Connect to MQTT if not already connected
+if not st.session_state.mqtt_connected:
+    connect_mqtt()
+
 # Main title bar
 st.title("🏠 Smart Home Dashboard")
 st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>Last updated: {st.session_state.last_update}</p>", unsafe_allow_html=True)
+
+# Display MQTT connection status
+mqtt_status = "🟢 Connected" if st.session_state.mqtt_connected else "🔴 Disconnected"
+st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT Status: {mqtt_status}</p>", unsafe_allow_html=True)
 
 # Update data every 3 seconds
 update_sensors()
@@ -491,6 +703,45 @@ elif st.session_state.current_tab == "Settings":
     # Temperature units
     temp_unit = st.radio("Temperature Units", ["Celsius (°C)", "Fahrenheit (°F)"])
     
+    # MQTT Settings
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("🔌 MQTT Connection Settings")
+    
+    mqtt_cols = st.columns([2, 1])
+    with mqtt_cols[0]:
+        new_broker = st.text_input("MQTT Broker", value=st.session_state.mqtt_broker)
+        new_port = st.number_input("MQTT Port", min_value=1, max_value=65535, value=st.session_state.mqtt_port)
+        new_username = st.text_input("MQTT Username (optional)", value=st.session_state.mqtt_username)
+        new_password = st.text_input("MQTT Password (optional)", value=st.session_state.mqtt_password, type="password")
+    
+    with mqtt_cols[1]:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        if st.button("Connect MQTT", use_container_width=True):
+            # Update connection details
+            st.session_state.mqtt_broker = new_broker
+            st.session_state.mqtt_port = new_port
+            st.session_state.mqtt_username = new_username
+            st.session_state.mqtt_password = new_password
+            
+            # Try to connect with new settings
+            if connect_mqtt():
+                st.success("MQTT connection established!")
+            else:
+                st.error("Failed to connect to MQTT broker")
+    
+    # MQTT Topics
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("📡 MQTT Topics")
+    
+    for name, topic in st.session_state.mqtt_topics.items():
+        st.text_input(f"{name.capitalize()} Topic", value=topic, key=f"topic_{name}")
+    
+    if st.button("Save Topics"):
+        # Update topics from inputs
+        for name in st.session_state.mqtt_topics.keys():
+            st.session_state.mqtt_topics[name] = st.session_state[f"topic_{name}"]
+        st.success("MQTT topics updated successfully!")
+    
     # Notification settings
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📳 Notification Settings")
@@ -531,6 +782,38 @@ elif st.session_state.current_tab == "Settings":
         if st.button("Restore Configuration", use_container_width=True):
             st.info("Select a backup file to restore")
             st.file_uploader("Upload backup file", type=["json"])
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # MQTT Message Log
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.subheader("📩 MQTT Message Log")
+    
+    if not st.session_state.mqtt_messages:
+        st.markdown("<p style='color: gray; font-style: italic;'>No MQTT messages received</p>", unsafe_allow_html=True)
+    else:
+        for msg in st.session_state.mqtt_messages[:10]:  # Show only the last 10 messages
+            st.markdown(
+                f"<div class='log-entry' style='border-color: #4299e1;'><b>Topic:</b> {msg['topic']} <br>"
+                f"<b>Payload:</b> {str(msg['payload'])} <br>"
+                f"<span style='color: gray; font-size: 0.8rem;'>{msg['time']}</span></div>",
+                unsafe_allow_html=True
+            )
+    
+    mqtt_cols = st.columns(3)
+    with mqtt_cols[0]:
+        custom_topic = st.text_input("Topic", placeholder="Enter MQTT topic")
+    with mqtt_cols[1]:
+        custom_payload = st.text_input("Payload", placeholder="Enter payload")
+    with mqtt_cols[2]:
+        if st.button("Publish", use_container_width=True):
+            if custom_topic and custom_payload:
+                if publish_mqtt(custom_topic, custom_payload):
+                    st.success(f"Message published to {custom_topic}")
+                else:
+                    st.error("Failed to publish message")
+            else:
+                st.error("Topic and payload are required")
     
     st.markdown("</div>", unsafe_allow_html=True)
 
