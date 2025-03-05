@@ -6,6 +6,43 @@ import random
 from datetime import datetime
 from dataclasses import dataclass
 
+# WiFi Network Management Class
+@dataclass
+class WifiNetwork:
+    ssid: str
+    signal_strength: int  # 0-100
+    security: str  # WPA, WPA2, WEP, Open
+    connected: bool = False
+
+# WiFi-related functions
+def scan_wifi_networks():
+    st.session_state.wifi_scanning = True
+    time.sleep(2)
+    for network in st.session_state.wifi_networks:
+        network.signal_strength = max(min(network.signal_strength + random.randint(-5, 5), 100), 5)
+    st.session_state.wifi_scanning = False
+
+def connect_to_wifi(ssid, password=""):
+    for network in st.session_state.wifi_networks:
+        network.connected = False
+    
+    target_network = next((n for n in st.session_state.wifi_networks if n.ssid == ssid), None)
+    if target_network:
+        target_network.connected = True
+        st.session_state.wifi_connected = True
+        st.session_state.wifi_ssid = ssid
+        return True
+    return False
+
+def disconnect_wifi():
+    if st.session_state.wifi_connected:
+        for network in st.session_state.wifi_networks:
+            network.connected = False
+        st.session_state.wifi_connected = False
+        return True
+    return False
+from dataclasses import dataclass
+
 # Simplify page configuration
 st.set_page_config(page_title="Smart Home Dashboard")
 
@@ -203,6 +240,22 @@ if 'irrigation_zones' not in st.session_state:
     }
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = "Dashboard"
+
+# WiFi Configuration
+if 'wifi_enabled' not in st.session_state:
+    st.session_state.wifi_enabled = True
+if 'wifi_connected' not in st.session_state:
+    st.session_state.wifi_connected = True
+if 'wifi_ssid' not in st.session_state:
+    st.session_state.wifi_ssid = "Home_Network"
+if 'wifi_networks' not in st.session_state:
+    st.session_state.wifi_networks = [
+        WifiNetwork("Home_Network", 90, "WPA2", True),
+        WifiNetwork("Neighbor_5G", 65, "WPA2"),
+        WifiNetwork("GuestNetwork", 45, "WPA"),
+        WifiNetwork("IoT_Network", 80, "WPA2"),
+        WifiNetwork("CoffeeShop_Free", 25, "Open")
+    ]
 
 # Custom CSS
 custom_css = """
