@@ -52,6 +52,21 @@ if 'irrigation_zones' not in st.session_state:
     }
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = "Dashboard"
+# New WiFi related session state variables
+if 'wifi_status' not in st.session_state:
+    st.session_state.wifi_status = 'connected'  # Options: connected, disconnected
+if 'wifi_network' not in st.session_state:
+    st.session_state.wifi_network = 'Home_Network_5G'
+if 'wifi_signal' not in st.session_state:
+    st.session_state.wifi_signal = 85  # Signal strength percentage
+if 'available_networks' not in st.session_state:
+    st.session_state.available_networks = [
+        {'name': 'Home_Network_5G', 'signal': 85, 'security': 'WPA2', 'connected': True},
+        {'name': 'Home_Network_2G', 'signal': 92, 'security': 'WPA2', 'connected': False},
+        {'name': 'Neighbor_WiFi', 'signal': 62, 'security': 'WPA2', 'connected': False},
+        {'name': 'Guest_Network', 'signal': 78, 'security': 'WPA2', 'connected': False},
+        {'name': 'IoT_Network', 'signal': 80, 'security': 'WPA2', 'connected': False}
+    ]
 
 # Apply custom CSS
 st.markdown("""
@@ -124,6 +139,21 @@ st.markdown("""
         background-color: white;
         border-bottom: 2px solid #4299e1;
     }
+    .wifi-network {
+        padding: 10px;
+        margin-bottom: 8px;
+        border-radius: 5px;
+        border: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+    }
+    .wifi-signal {
+        margin-left: auto;
+    }
+    .wifi-connected {
+        background-color: #e6fffa;
+        border-color: #38b2ac;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -195,6 +225,31 @@ def update_irrigation_schedule(zone, schedule, duration):
     st.session_state.irrigation_zones[zone]['duration'] = duration
     add_activity(f"{zone.replace('_', ' ').capitalize()} irrigation schedule updated", "irrigation")
 
+# New function to connect to WiFi network
+def connect_to_wifi(network_name):
+    # Disconnect from current network first
+    for network in st.session_state.available_networks:
+        network['connected'] = False
+        
+    # Connect to the selected network
+    for network in st.session_state.available_networks:
+        if network['name'] == network_name:
+            network['connected'] = True
+            st.session_state.wifi_network = network_name
+            st.session_state.wifi_signal = network['signal']
+            st.session_state.wifi_status = 'connected'
+            add_activity(f"Connected to WiFi network: {network_name}", "wifi")
+            break
+
+# New function to refresh WiFi networks
+def refresh_wifi_networks():
+    # Simulate signal strength changes
+    for network in st.session_state.available_networks:
+        # Random signal fluctuation between -5 and +5
+        network['signal'] = min(max(network['signal'] + random.randint(-5, 5), 20), 99)
+    
+    add_activity("WiFi networks refreshed", "wifi")
+
 # Simulate sensor updates
 def update_sensors():
     # Update temperature with small random changes
@@ -226,6 +281,21 @@ def update_sensors():
     st.session_state.energy_data['weekly_total'] = round(st.session_state.energy_data['weekly_total'] + energy_change * 7, 2)
     st.session_state.energy_data['monthly_total'] = round(st.session_state.energy_data['monthly_total'] + energy_change * 30, 2)
     
+    # Update WiFi signal strength with small random changes
+    if st.session_state.wifi_status == 'connected':
+        signal_change = (random.random() - 0.5) * 2
+        st.session_state.wifi_signal = min(max(round(st.session_state.wifi_signal + signal_change), 20), 99)
+        
+        # Small chance of disconnection
+        if random.random() < 0.02:
+            st.session_state.wifi_status = 'disconnected'
+            add_activity("WiFi connection lost", "alert")
+    else:
+        # Small chance of automatic reconnection
+        if random.random() < 0.2:
+            st.session_state.wifi_status = 'connected'
+            add_activity(f"WiFi reconnected to {st.session_state.wifi_network}", "wifi")
+    
     # Update timestamp
     st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
 
@@ -248,7 +318,7 @@ if st.session_state.alerts:
         st.experimental_rerun()
 
 # Create tabs using buttons
-tabs = ["Dashboard", "Security", "Energy", "Irrigation", "Settings"]
+tabs = ["Dashboard", "Security", "Energy", "Irrigation", "WiFi", "Settings"]
 cols = st.columns(len(tabs))
 for i, tab in enumerate(tabs):
     active_class = "tab-button-active" if st.session_state.current_tab == tab else ""
@@ -483,86 +553,67 @@ elif st.session_state.current_tab == "Irrigation":
     
     st.markdown("</div>", unsafe_allow_html=True)
 
-# Settings tab content
-elif st.session_state.current_tab == "Settings":
+# New WiFi tab content
+elif st.session_state.current_tab == "WiFi":
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("⚙️ System Settings")
+    st.subheader("📶 WiFi Connection Status")
     
-    # Temperature units
-    temp_unit = st.radio("Temperature Units", ["Celsius (°C)", "Fahrenheit (°F)"])
+    # WiFi connection status
+    status_color = "green" if st.session_state.wifi_status == 'connected' else "red"
+    status_text = "Connected" if st.session_state.wifi_status == 'connected' else "Disconnected"
     
-    # Notification settings
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📳 Notification Settings")
-    
-    notification_types = {
-        "Security alerts": True,
-        "Temperature warnings": True,
-        "Motion detection": False,
-        "Energy usage reports": True
-    }
-    
-    for alert_type, default in notification_types.items():
-        st.checkbox(alert_type, value=default)
-    
-    # User profiles
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("👤 User Profiles")
-    
-    profiles = ["Admin", "Family Member", "Guest"]
-    selected_profile = st.selectbox("Select profile to edit", profiles)
-    
-    if selected_profile:
-        profile_cols = st.columns(2)
-        with profile_cols[0]:
-            st.text_input("Name", value=selected_profile)
-        with profile_cols[1]:
-            st.selectbox("Access Level", ["Full Access", "Limited Access", "Basic Access"])
-    
-    # Backup and restore
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("💾 Backup & Restore")
-    
-    backup_cols = st.columns(2)
-    with backup_cols[0]:
-        if st.button("Backup Configuration", use_container_width=True):
-            st.success("Configuration backed up successfully!")
-    with backup_cols[1]:
-        if st.button("Restore Configuration", use_container_width=True):
-            st.info("Select a backup file to restore")
-            st.file_uploader("Upload backup file", type=["json"])
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# Activity Log (shown on all tabs)
-st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.subheader("📝 Recent Activity")
-
-if not st.session_state.activity_log:
-    st.markdown("<p style='color: gray; font-style: italic;'>No recent activity</p>", unsafe_allow_html=True)
-else:
-    for entry in st.session_state.activity_log:
-        color = {
-            "alert": "#f56565",
-            "motion": "#48bb78",
-            "light": "#ecc94b",
-            "thermostat": "#4299e1",
-            "fan": "#805ad5",
-            "system": "#718096",
-            "security": "#9f7aea",
-            "irrigation": "#38b2ac",
-            "info": "#a0aec0"
-        }.get(entry["type"], "#a0aec0")
+    status_cols = st.columns([3, 1])
+    with status_cols[0]:
+        st.markdown(f"<div class='device-label'>Status <span class='sensor-value' style='color: {status_color};'>{status_text}</span></div>", unsafe_allow_html=True)
+    with status_cols[1]:
+        if st.button("Refresh", key="refresh_wifi", use_container_width=True):
+            refresh_wifi_networks()
+            
+    # Show current connection details if connected
+    if st.session_state.wifi_status == 'connected':
+        st.markdown(f"<div class='device-label'>Network <span class='sensor-value'>{st.session_state.wifi_network}</span></div>", unsafe_allow_html=True)
         
-        st.markdown(
-            f"<div class='log-entry' style='border-color: {color};'>{entry['message']} "
-            f"<span style='color: gray; font-size: 0.8rem;'>{entry['time']}</span></div>",
-            unsafe_allow_html=True
-        )
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# Auto-refresh the app
-st.empty()
-time.sleep(3)  # Wait for 3 seconds
-st.experimental_rerun()
+        # Display signal strength
+        st.markdown(f"<div class='device-label'>Signal Strength <span class='sensor-value'>{st.session_state.wifi_signal}%</span></div>", unsafe_allow_html=True)
+        st.progress(st.session_state.wifi_signal / 100)
+    
+    # Available Networks section
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("📡 Available Networks")
+    
+    # Sort networks by signal strength
+    sorted_networks = sorted(st.session_state.available_networks, key=lambda x: x['signal'], reverse=True)
+    
+    for network in sorted_networks:
+        # Determine the CSS class for the network item
+        network_class = "wifi-network"
+        if network['connected']:
+            network_class += " wifi-connected"
+            
+        # Signal icon based on strength
+        if network['signal'] > 80:
+            signal_icon = "📶"
+        elif network['signal'] > 60:
+            signal_icon = "📶"
+        elif network['signal'] > 40:
+            signal_icon = "📶"
+        else:
+            signal_icon = "📶"
+            
+        # Create the network item
+        st.markdown(f"<div class='{network_class}'>", unsafe_allow_html=True)
+        
+        net_cols = st.columns([3, 1])
+        with net_cols[0]:
+            st.markdown(f"<b>{network['name']}</b> ({network['security']})")
+            if network['connected']:
+                st.markdown("<span style='color: green; font-size: 0.8rem;'>✓ Connected</span>", unsafe_allow_html=True)
+        with net_cols[1]:
+            st.markdown(f"<div class='wifi-signal'>{signal_icon} {network['signal']}%</div>", unsafe_allow_html=True)
+            
+            # Connection button
+            if not network['connected']:
+                if st.button("Connect", key=f"connect_{network['name']}", use_container_width=True):
+                    connect_to_wifi(network['name'])
+        
+        st.markdown("</div>", unsafe_allow_html=True)
