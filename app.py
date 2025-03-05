@@ -1,14 +1,4 @@
-# Activity Log (shown on all tabs)
-st.write("📝 Recent Activity")
-
-if not st.session_state.activity_log:
-    st.write("No recent activity")
-else:
-    for entry in st.session_state.activity_log:
-        st.write(f"{entry['message']} ({entry['time']})")
-# Always make json available
-import json
-import threadingimport streamlit as st
+import streamlit as st
 import pandas as pd
 import numpy as np
 import time
@@ -25,6 +15,10 @@ try:
     MQTT_AVAILABLE = True
 except ImportError:
     MQTT_AVAILABLE = False
+
+# Always make json available
+import json
+import threading
 
 # Set page config
 st.set_page_config(
@@ -219,100 +213,6 @@ def add_activity(message, entry_type="info"):
     if len(st.session_state.activity_log) > 10:
         st.session_state.activity_log.pop()
 
-# Function to toggle lights
-def toggle_light(room):
-    st.session_state.lights[room] = not st.session_state.lights[room]
-    status = "on" if st.session_state.lights[room] else "off"
-    add_activity(f"{room.capitalize()} light turned {status}", "light")
-
-# Function to change thermostat
-def update_thermostat(new_value):
-    old_value = st.session_state.thermostat
-    st.session_state.thermostat = new_value
-    add_activity(f"Thermostat changed from {old_value}°C to {new_value}°C", "thermostat")
-    
-    # Check if thermostat is set too high
-    if new_value > 28 and not any("Thermostat set very high" in alert for alert in st.session_state.alerts):
-        st.session_state.alerts.append(f"Thermostat set very high: {new_value}°C")
-
-# Function to change fan speed
-def update_fan_speed(new_speed):
-    old_speed = st.session_state.fan_speed
-    st.session_state.fan_speed = new_speed
-    speed_name = "Off" if new_speed == 0 else f"Level {new_speed}"
-    old_speed_name = "Off" if old_speed == 0 else f"Level {old_speed}"
-    add_activity(f"Fan speed changed from {old_speed_name} to {speed_name}", "fan")
-
-# New function to toggle camera
-def toggle_camera(camera):
-    st.session_state.cameras[camera] = not st.session_state.cameras[camera]
-    status = "on" if st.session_state.cameras[camera] else "off"
-    add_activity(f"{camera.replace('_', ' ').capitalize()} camera turned {status}", "security")
-
-# New function to change security system status
-def update_security_system(new_status):
-    old_status = st.session_state.security_system
-    st.session_state.security_system = new_status
-    add_activity(f"Security system changed from {old_status} to {new_status}", "security")
-
-# New function to update door status
-def update_door(door, status):
-    old_status = st.session_state.door_status[door]
-    st.session_state.door_status[door] = status
-    add_activity(f"{door.capitalize()} door {status}", "security")
-    
-    # Add alert if door is opened while security system is armed
-    if status == "open" and st.session_state.security_system != "disarmed":
-        alert_message = f"Security alert: {door} door opened while system armed!"
-        st.session_state.alerts.append(alert_message)
-        add_activity(alert_message, "alert")
-
-# New function to toggle irrigation zone
-def toggle_irrigation(zone):
-    st.session_state.irrigation_zones[zone]['active'] = not st.session_state.irrigation_zones[zone]['active']
-    status = "activated" if st.session_state.irrigation_zones[zone]['active'] else "deactivated"
-    add_activity(f"{zone.replace('_', ' ').capitalize()} irrigation zone {status}", "irrigation")
-
-# New function to update irrigation schedule
-def update_irrigation_schedule(zone, schedule, duration):
-    st.session_state.irrigation_zones[zone]['schedule'] = schedule
-    st.session_state.irrigation_zones[zone]['duration'] = duration
-    add_activity(f"{zone.replace('_', ' ').capitalize()} irrigation schedule updated", "irrigation")
-
-# Simulate sensor updates
-def update_sensors():
-    # Update temperature with small random changes
-    temp_change = (random.random() - 0.5) * 0.8
-    st.session_state.temperature = round(st.session_state.temperature + temp_change, 1)
-    
-    # Update humidity with small random changes
-    humidity_change = (random.random() - 0.5) * 2
-    st.session_state.humidity = min(max(round(st.session_state.humidity + humidity_change), 30), 70)
-    
-    # Random motion detection (10% chance)
-    if random.random() < 0.1:
-        if not st.session_state.motion:
-            st.session_state.motion = True
-            add_activity("Motion detected", "motion")
-    else:
-        if st.session_state.motion:
-            st.session_state.motion = False
-    
-    # Check for temperature alerts
-    if st.session_state.temperature > 26 and not any("Temperature above normal" in alert for alert in st.session_state.alerts):
-        alert_message = f"Temperature above normal: {st.session_state.temperature}°C"
-        st.session_state.alerts.append(alert_message)
-        add_activity(alert_message, "alert")
-    
-    # Update energy data with small random changes
-    energy_change = (random.random() - 0.4) * 0.5
-    st.session_state.energy_data['daily_usage'] = round(st.session_state.energy_data['daily_usage'] + energy_change, 2)
-    st.session_state.energy_data['weekly_total'] = round(st.session_state.energy_data['weekly_total'] + energy_change * 7, 2)
-    st.session_state.energy_data['monthly_total'] = round(st.session_state.energy_data['monthly_total'] + energy_change * 30, 2)
-    
-    # Update timestamp
-    st.session_state.last_update = datetime.now().strftime("%H:%M:%S")
-
 # MQTT Connection Functions
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -440,84 +340,6 @@ def publish_mqtt(topic, payload):
         add_activity("Cannot publish: MQTT not connected", "alert")
         return False
 
-# Update functions to also send MQTT messages if available
-
-# Modified function to toggle lights with MQTT
-def toggle_light(room):
-    st.session_state.lights[room] = not st.session_state.lights[room]
-    status = "on" if st.session_state.lights[room] else "off"
-    add_activity(f"{room.capitalize()} light turned {status}", "light")
-    
-    # Publish to MQTT if available
-    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
-        topic = f"{st.session_state.mqtt_topics['lights']}/{room}"
-        payload = {"room": room, "status": st.session_state.lights[room]}
-        publish_mqtt(topic, payload)
-
-# Modified function to change thermostat with MQTT
-def update_thermostat(new_value):
-    old_value = st.session_state.thermostat
-    st.session_state.thermostat = new_value
-    add_activity(f"Thermostat changed from {old_value}°C to {new_value}°C", "thermostat")
-    
-    # Publish to MQTT if available
-    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
-        topic = f"{st.session_state.mqtt_topics['thermostat']}/set"
-        payload = {"value": new_value, "unit": "celsius"}
-        publish_mqtt(topic, payload)
-    
-    # Check if thermostat is set too high
-    if new_value > 28 and not any("Thermostat set very high" in alert for alert in st.session_state.alerts):
-        st.session_state.alerts.append(f"Thermostat set very high: {new_value}°C")
-
-# Modified function to change fan speed with MQTT
-def update_fan_speed(new_speed):
-    old_speed = st.session_state.fan_speed
-    st.session_state.fan_speed = new_speed
-    speed_name = "Off" if new_speed == 0 else f"Level {new_speed}"
-    old_speed_name = "Off" if old_speed == 0 else f"Level {old_speed}"
-    add_activity(f"Fan speed changed from {old_speed_name} to {speed_name}", "fan")
-    
-    # Publish to MQTT if available
-    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
-        topic = f"{st.session_state.mqtt_topics['thermostat']}/fan"
-        payload = {"speed": new_speed, "name": speed_name}
-        publish_mqtt(topic, payload)
-
-# Modified function to update door status with MQTT
-def update_door(door, status):
-    old_status = st.session_state.door_status[door]
-    st.session_state.door_status[door] = status
-    add_activity(f"{door.capitalize()} door {status}", "security")
-    
-    # Publish to MQTT if available
-    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
-        topic = f"{st.session_state.mqtt_topics['doors']}/{door}"
-        payload = {"door": door, "status": status}
-        publish_mqtt(topic, payload)
-    
-    # Add alert if door is opened while security system is armed
-    if status == "open" and st.session_state.security_system != "disarmed":
-        alert_message = f"Security alert: {door} door opened while system armed!"
-        st.session_state.alerts.append(alert_message)
-        add_activity(alert_message, "alert")
-
-# Modified function to update security system with MQTT
-def update_security_system(new_status):
-    old_status = st.session_state.security_system
-    st.session_state.security_system = new_status
-    add_activity(f"Security system changed from {old_status} to {new_status}", "security")
-    
-    # Publish to MQTT if available
-    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
-        topic = f"{st.session_state.mqtt_topics['security']}/mode"
-        payload = {"mode": new_status}
-        publish_mqtt(topic, payload)
-
-# Connect to MQTT if available and not already connected
-if MQTT_AVAILABLE and not st.session_state.mqtt_connected:
-    connect_mqtt()
-
 # WiFi Functions
 def scan_wifi_networks():
     """Simulate scanning for WiFi networks"""
@@ -616,6 +438,84 @@ def toggle_wifi():
     else:
         add_activity("WiFi turned on", "system")
         # Don't auto-connect, let user initiate connection
+
+# Update functions to also send MQTT messages if available
+
+# Modified function to toggle lights with MQTT
+def toggle_light(room):
+    st.session_state.lights[room] = not st.session_state.lights[room]
+    status = "on" if st.session_state.lights[room] else "off"
+    add_activity(f"{room.capitalize()} light turned {status}", "light")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['lights']}/{room}"
+        payload = {"room": room, "status": st.session_state.lights[room]}
+        publish_mqtt(topic, payload)
+
+# Modified function to change thermostat with MQTT
+def update_thermostat(new_value):
+    old_value = st.session_state.thermostat
+    st.session_state.thermostat = new_value
+    add_activity(f"Thermostat changed from {old_value}°C to {new_value}°C", "thermostat")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['thermostat']}/set"
+        payload = {"value": new_value, "unit": "celsius"}
+        publish_mqtt(topic, payload)
+    
+    # Check if thermostat is set too high
+    if new_value > 28 and not any("Thermostat set very high" in alert for alert in st.session_state.alerts):
+        st.session_state.alerts.append(f"Thermostat set very high: {new_value}°C")
+
+# Modified function to change fan speed with MQTT
+def update_fan_speed(new_speed):
+    old_speed = st.session_state.fan_speed
+    st.session_state.fan_speed = new_speed
+    speed_name = "Off" if new_speed == 0 else f"Level {new_speed}"
+    old_speed_name = "Off" if old_speed == 0 else f"Level {old_speed}"
+    add_activity(f"Fan speed changed from {old_speed_name} to {speed_name}", "fan")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['thermostat']}/fan"
+        payload = {"speed": new_speed, "name": speed_name}
+        publish_mqtt(topic, payload)
+
+# Modified function to update door status with MQTT
+def update_door(door, status):
+    old_status = st.session_state.door_status[door]
+    st.session_state.door_status[door] = status
+    add_activity(f"{door.capitalize()} door {status}", "security")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['doors']}/{door}"
+        payload = {"door": door, "status": status}
+        publish_mqtt(topic, payload)
+    
+    # Add alert if door is opened while security system is armed
+    if status == "open" and st.session_state.security_system != "disarmed":
+        alert_message = f"Security alert: {door} door opened while system armed!"
+        st.session_state.alerts.append(alert_message)
+        add_activity(alert_message, "alert")
+
+# Modified function to update security system with MQTT
+def update_security_system(new_status):
+    old_status = st.session_state.security_system
+    st.session_state.security_system = new_status
+    add_activity(f"Security system changed from {old_status} to {new_status}", "security")
+    
+    # Publish to MQTT if available
+    if MQTT_AVAILABLE and st.session_state.mqtt_connected:
+        topic = f"{st.session_state.mqtt_topics['security']}/mode"
+        payload = {"mode": new_status}
+        publish_mqtt(topic, payload)
+
+# Connect to MQTT if available and not already connected
+if MQTT_AVAILABLE and not st.session_state.mqtt_connected:
+    connect_mqtt()
 
 # Main title bar
 st.title("🏠 Smart Home Dashboard")
@@ -733,8 +633,7 @@ elif st.session_state.current_tab == "Security":
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("🔐 Security System")
+        st.write("🔐 Security System")
         
         # Security system status
         status_color = {
@@ -743,7 +642,7 @@ elif st.session_state.current_tab == "Security":
             'armed_away': 'green'
         }[st.session_state.security_system]
         
-        st.markdown(f"<div class='device-label'>System Status <span class='sensor-value' style='color: {status_color};'>{st.session_state.security_system.replace('_', ' ').capitalize()}</span></div>", unsafe_allow_html=True)
+        st.write(f"System Status: {st.session_state.security_system.replace('_', ' ').capitalize()}")
         
         # Security system controls
         security_cols = st.columns(3)
@@ -758,12 +657,11 @@ elif st.session_state.current_tab == "Security":
                 update_security_system("armed_away")
         
         # Door controls
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("<div class='device-label'>🚪 Door Controls</div>", unsafe_allow_html=True)
+        st.write("🚪 Door Controls")
         
         for door, status in st.session_state.door_status.items():
             door_color = "red" if status == "open" else "green"
-            st.markdown(f"<div class='device-label'>{door.capitalize()} <span style='color: {door_color};'>{status.capitalize()}</span></div>", unsafe_allow_html=True)
+            st.write(f"{door.capitalize()}: {status.capitalize()}")
             
             door_cols = st.columns(2)
             with door_cols[0]:
@@ -772,37 +670,33 @@ elif st.session_state.current_tab == "Security":
             with door_cols[1]:
                 if st.button("Close", key=f"close_{door}", use_container_width=True):
                     update_door(door, "closed")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📹 Security Cameras")
+        st.write("📹 Security Cameras")
         
         # Camera controls
         for camera, status in st.session_state.cameras.items():
             camera_status = "On" if status else "Off"
             camera_color = "green" if status else "gray"
-            st.markdown(f"<div class='device-label'>{camera.replace('_', ' ').capitalize()} <span style='color: {camera_color};'>{camera_status}</span></div>", unsafe_allow_html=True)
+            st.write(f"{camera.replace('_', ' ').capitalize()}: {camera_status}")
             
             camera_cols = st.columns([3, 1])
             with camera_cols[0]:
-                st.markdown(f"<div style='height: 5px;'></div>", unsafe_allow_html=True)
+                st.write("")
             with camera_cols[1]:
                 if st.button("Toggle", key=f"camera_{camera}", use_container_width=True):
-                    toggle_camera(camera)
+                    st.session_state.cameras[camera] = not st.session_state.cameras[camera]
+                    status_text = "activated" if st.session_state.cameras[camera] else "deactivated"
+                    add_activity(f"{camera.replace('_', ' ').capitalize()} camera {status_text}", "security")
             
             if status:
                 # Placeholder for camera feed (just a gray box in this demo)
-                st.markdown(f"<div style='background-color: #d1d1d1; height: 120px; border-radius: 5px; display: flex; justify-content: center; align-items: center;'><p style='color: #555;'>Camera Feed: {camera.replace('_', ' ').capitalize()}</p></div>", unsafe_allow_html=True)
-                st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown(f"Camera Feed: {camera.replace('_', ' ').capitalize()}")
+                st.write("")
 
 # Energy tab content
 elif st.session_state.current_tab == "Energy":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("⚡ Energy Usage")
+    st.write("⚡ Energy Usage")
     
     # Display current energy metrics
     col1, col2, col3 = st.columns(3)
@@ -826,7 +720,7 @@ elif st.session_state.current_tab == "Energy":
     st.line_chart(pd.DataFrame({'Energy (kWh)': energy_values}, index=energy_times))
     
     # Energy saving recommendations
-    st.subheader("💡 Energy Saving Recommendations")
+    st.write("💡 Energy Saving Recommendations")
     recommendations = [
         "Turn off lights in unoccupied rooms",
         "Reduce thermostat by 1°C to save up to 10% on heating costs",
@@ -835,44 +729,44 @@ elif st.session_state.current_tab == "Energy":
     ]
     
     for i, rec in enumerate(recommendations):
-        st.markdown(f"**{i+1}.** {rec}")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+        st.write(f"{i+1}. {rec}")
 
 # Irrigation tab content
 elif st.session_state.current_tab == "Irrigation":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("🌱 Irrigation System")
+    st.write("🌱 Irrigation System")
     
     for zone, data in st.session_state.irrigation_zones.items():
         zone_status = "Active" if data['active'] else "Inactive"
         zone_color = "green" if data['active'] else "gray"
         
-        st.markdown(f"<div class='device-label'><b>{zone.replace('_', ' ').capitalize()}</b> <span style='color: {zone_color};'>{zone_status}</span></div>", unsafe_allow_html=True)
+        st.write(f"{zone.replace('_', ' ').capitalize()}: {zone_status}")
+        st.write(f"Schedule: {data['schedule']}, Duration: {data['duration']} min")
         
         zone_cols = st.columns([2, 1, 1])
         with zone_cols[0]:
-            st.markdown(f"Schedule: {data['schedule']}, Duration: {data['duration']} min")
-        with zone_cols[1]:
             new_schedule = st.time_input(f"New time", label_visibility="collapsed", key=f"time_{zone}")
             new_schedule_str = new_schedule.strftime("%I:%M %p")
-        with zone_cols[2]:
+        with zone_cols[1]:
             new_duration = st.number_input(f"Duration (min)", min_value=5, max_value=60, value=data['duration'], step=5, label_visibility="collapsed", key=f"duration_{zone}")
         
         control_cols = st.columns([3, 1, 1])
         with control_cols[0]:
-            st.markdown(f"<div style='height: 5px;'></div>", unsafe_allow_html=True)
+            st.write("")
         with control_cols[1]:
             if st.button("Update Schedule", key=f"update_{zone}", use_container_width=True):
-                update_irrigation_schedule(zone, new_schedule_str, new_duration)
+                st.session_state.irrigation_zones[zone]['schedule'] = new_schedule_str
+                st.session_state.irrigation_zones[zone]['duration'] = new_duration
+                add_activity(f"{zone.replace('_', ' ').capitalize()} irrigation schedule updated", "irrigation")
         with control_cols[2]:
             if st.button("Toggle", key=f"toggle_{zone}", use_container_width=True):
-                toggle_irrigation(zone)
+                st.session_state.irrigation_zones[zone]['active'] = not st.session_state.irrigation_zones[zone]['active']
+                status = "activated" if st.session_state.irrigation_zones[zone]['active'] else "deactivated"
+                add_activity(f"{zone.replace('_', ' ').capitalize()} irrigation zone {status}", "irrigation")
         
-        st.markdown("<hr>", unsafe_allow_html=True)
+        st.write("---")
     
     # Weather forecast (simplified)
-    st.subheader("☁️ Weather Forecast")
+    st.write("☁️ Weather Forecast")
     weather_data = [
         {"day": "Today", "icon": "☀️", "temp": "24°C", "precip": "0%"},
         {"day": "Tomorrow", "icon": "⛅", "temp": "22°C", "precip": "10%"},
@@ -882,23 +776,22 @@ elif st.session_state.current_tab == "Irrigation":
     weather_cols = st.columns(len(weather_data))
     for i, day in enumerate(weather_data):
         with weather_cols[i]:
-            st.markdown(f"<div style='text-align: center;'><h4>{day['day']}</h4><p style='font-size: 2rem; margin: 0;'>{day['icon']}</p><p>{day['temp']}</p><p>Precipitation: {day['precip']}</p></div>", unsafe_allow_html=True)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+            st.write(f"{day['day']}")
+            st.write(f"{day['icon']}")
+            st.write(f"{day['temp']}")
+            st.write(f"Precipitation: {day['precip']}")
 
-# Settings tab content
 # WiFi tab content
 elif st.session_state.current_tab == "WiFi":
     col1, col2 = st.columns([3, 2])
     
     with col1:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📶 WiFi Networks")
+        st.write("📶 WiFi Networks")
         
         # WiFi toggle
         wifi_toggle_cols = st.columns([3, 2])
         with wifi_toggle_cols[0]:
-            st.markdown(f"<div class='device-label'>WiFi <span class='sensor-value' style='color: {'green' if st.session_state.wifi_enabled else 'gray'};'>{'Enabled' if st.session_state.wifi_enabled else 'Disabled'}</span></div>", unsafe_allow_html=True)
+            st.write(f"WiFi: {'Enabled' if st.session_state.wifi_enabled else 'Disabled'}")
         with wifi_toggle_cols[1]:
             if st.button("Toggle WiFi", key="toggle_wifi", use_container_width=True):
                 toggle_wifi()
@@ -921,25 +814,16 @@ elif st.session_state.current_tab == "WiFi":
                 
                 for i, network in enumerate(sorted_networks):
                     # Display network details
-                    signal_icon = "📶" if network.signal_strength > 70 else "📶" if network.signal_strength > 40 else "📶"
-                    security_icon = "🔒" if network.security != "Open" else "🔓"
+                    st.write(f"{network.ssid} {' (Connected)' if network.connected else ''}")
+                    st.write(f"Security: {network.security}")
                     
                     network_cols = st.columns([3, 1, 1])
                     with network_cols[0]:
-                        st.markdown(f"""
-                            <div style="display: flex; align-items: center;">
-                                <div style="font-weight: {'bold' if network.connected else 'normal'}; color: {'green' if network.connected else 'black'};">
-                                    {network.ssid} {" (Connected)" if network.connected else ""}
-                                </div>
-                                <div style="margin-left: 10px; color: gray; font-size: 0.8rem;">
-                                    {security_icon} {network.security}
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with network_cols[1]:
                         # Signal strength bar
                         st.progress(network.signal_strength / 100)
+                    
+                    with network_cols[1]:
+                        st.write(f"{network.signal_strength}%")
                     
                     with network_cols[2]:
                         if not network.connected:
@@ -965,35 +849,28 @@ elif st.session_state.current_tab == "WiFi":
                                 delattr(st.session_state, 'connect_to_ssid')
                                 st.experimental_rerun()
                     
-                    st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+                    st.write("---")
         
         else:
             st.info("WiFi is currently disabled. Enable WiFi to scan for networks.")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
     
     with col2:
         # Current connection details
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📡 Connection Details")
+        st.write("📡 Connection Details")
         
         if st.session_state.wifi_connected:
             # Find the connected network
             connected_network = next((n for n in st.session_state.wifi_networks if n.connected), None)
             
             if connected_network:
-                st.markdown(f"""
-                    <div style='margin-bottom: 15px;'>
-                        <div style='font-size: 1.1rem; font-weight: bold;'>{connected_network.ssid}</div>
-                        <div>Security: {connected_network.security}</div>
-                        <div>Signal Strength: {connected_network.signal_strength}%</div>
-                        <div>IP Address: {st.session_state.wifi_ip}</div>
-                        <div>MAC Address: AA:BB:CC:DD:EE:FF</div>
-                    </div>
-                """, unsafe_allow_html=True)
+                st.write(f"Connected to: {connected_network.ssid}")
+                st.write(f"Security: {connected_network.security}")
+                st.write(f"Signal Strength: {connected_network.signal_strength}%")
+                st.write(f"IP Address: {st.session_state.wifi_ip}")
+                st.write(f"MAC Address: AA:BB:CC:DD:EE:FF")
                 
                 # Signal strength indicator
-                st.markdown("<div>Signal Strength</div>", unsafe_allow_html=True)
+                st.write("Signal Strength")
                 st.progress(connected_network.signal_strength / 100)
                 
                 # Disconnect button
@@ -1019,35 +896,26 @@ elif st.session_state.current_tab == "WiFi":
         else:
             st.info("Not connected to any WiFi network")
         
-        st.markdown("</div>", unsafe_allow_html=True)
-        
         # Connection history
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📜 Connection History")
+        st.write("📜 Connection History")
         
         if not st.session_state.wifi_connection_history:
-            st.markdown("<p style='color: gray; font-style: italic;'>No connection history</p>", unsafe_allow_html=True)
+            st.write("No connection history")
         else:
             for entry in st.session_state.wifi_connection_history:
-                st.markdown(
-                    f"<div class='log-entry' style='border-color: #4299e1;'>{entry['event']} "
-                    f"<span style='color: gray; font-size: 0.8rem;'>{entry['time']}</span></div>",
-                    unsafe_allow_html=True
-                )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.write(f"{entry['event']} ({entry['time']})")
 
+# Settings tab content
 elif st.session_state.current_tab == "Settings":
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("⚙️ System Settings")
+    # System Settings
+    st.write("⚙️ System Settings")
     
     # Temperature units
     temp_unit = st.radio("Temperature Units", ["Celsius (°C)", "Fahrenheit (°F)"])
     
     # MQTT Settings - only if MQTT is available
     if MQTT_AVAILABLE:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("🔌 MQTT Connection Settings")
+        st.write("🔌 MQTT Connection Settings")
         
         mqtt_cols = st.columns([2, 1])
         with mqtt_cols[0]:
@@ -1057,7 +925,8 @@ elif st.session_state.current_tab == "Settings":
             new_password = st.text_input("MQTT Password (optional)", value=st.session_state.mqtt_password, type="password")
         
         with mqtt_cols[1]:
-            st.markdown("<br><br>", unsafe_allow_html=True)
+            st.write("")
+            st.write("")
             if st.button("Connect MQTT", use_container_width=True):
                 # Update connection details
                 st.session_state.mqtt_broker = new_broker
@@ -1072,8 +941,7 @@ elif st.session_state.current_tab == "Settings":
                     st.error("Failed to connect to MQTT broker")
         
         # MQTT Topics
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.subheader("📡 MQTT Topics")
+        st.write("📡 MQTT Topics")
         
         for name, topic in st.session_state.mqtt_topics.items():
             st.text_input(f"{name.capitalize()} Topic", value=topic, key=f"topic_{name}")
@@ -1084,12 +952,10 @@ elif st.session_state.current_tab == "Settings":
                 st.session_state.mqtt_topics[name] = st.session_state[f"topic_{name}"]
             st.success("MQTT topics updated successfully!")
     else:
-        st.markdown("<br>", unsafe_allow_html=True)
         st.info("MQTT functionality is not available. To enable MQTT features, install the paho-mqtt library with: `pip install paho-mqtt`")
     
     # Notification settings
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📳 Notification Settings")
+    st.write("📳 Notification Settings")
     
     notification_types = {
         "Security alerts": True,
@@ -1102,8 +968,7 @@ elif st.session_state.current_tab == "Settings":
         st.checkbox(alert_type, value=default)
     
     # User profiles
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("👤 User Profiles")
+    st.write("👤 User Profiles")
     
     profiles = ["Admin", "Family Member", "Guest"]
     selected_profile = st.selectbox("Select profile to edit", profiles)
@@ -1116,8 +981,7 @@ elif st.session_state.current_tab == "Settings":
             st.selectbox("Access Level", ["Full Access", "Limited Access", "Basic Access"])
     
     # Backup and restore
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("💾 Backup & Restore")
+    st.write("💾 Backup & Restore")
     
     backup_cols = st.columns(2)
     with backup_cols[0]:
@@ -1128,23 +992,18 @@ elif st.session_state.current_tab == "Settings":
             st.info("Select a backup file to restore")
             st.file_uploader("Upload backup file", type=["json"])
     
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-        # MQTT Message Log - only show if MQTT is available
+    # MQTT Message Log - only show if MQTT is available
     if MQTT_AVAILABLE:
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📩 MQTT Message Log")
+        st.write("📩 MQTT Message Log")
         
         if not st.session_state.mqtt_messages:
-            st.markdown("<p style='color: gray; font-style: italic;'>No MQTT messages received</p>", unsafe_allow_html=True)
+            st.write("No MQTT messages received")
         else:
             for msg in st.session_state.mqtt_messages[:10]:  # Show only the last 10 messages
-                st.markdown(
-                    f"<div class='log-entry' style='border-color: #4299e1;'><b>Topic:</b> {msg['topic']} <br>"
-                    f"<b>Payload:</b> {str(msg['payload'])} <br>"
-                    f"<span style='color: gray; font-size: 0.8rem;'>{msg['time']}</span></div>",
-                    unsafe_allow_html=True
-                )
+                st.write(f"Topic: {msg['topic']}")
+                st.write(f"Payload: {str(msg['payload'])}")
+                st.write(f"Time: {msg['time']}")
+                st.write("---")
         
         mqtt_cols = st.columns(3)
         with mqtt_cols[0]:
@@ -1160,113 +1019,15 @@ elif st.session_state.current_tab == "Settings":
                         st.error("Failed to publish message")
                 else:
                     st.error("Topic and payload are required")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.info("MQTT functionality is not available. To enable MQTT features, install the paho-mqtt library with: `pip install paho-mqtt`")
-    
-    st.markdown("</div>", unsafe_allow_html=True)", unsafe_allow_html=True)
-        if st.button("Connect MQTT", use_container_width=True):
-            # Update connection details
-            st.session_state.mqtt_broker = new_broker
-            st.session_state.mqtt_port = new_port
-            st.session_state.mqtt_username = new_username
-            st.session_state.mqtt_password = new_password
-            
-            # Try to connect with new settings
-            if connect_mqtt():
-                st.success("MQTT connection established!")
-            else:
-                st.error("Failed to connect to MQTT broker")
-    
-    # MQTT Topics
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📡 MQTT Topics")
-    
-    for name, topic in st.session_state.mqtt_topics.items():
-        st.text_input(f"{name.capitalize()} Topic", value=topic, key=f"topic_{name}")
-    
-    if st.button("Save Topics"):
-        # Update topics from inputs
-        for name in st.session_state.mqtt_topics.keys():
-            st.session_state.mqtt_topics[name] = st.session_state[f"topic_{name}"]
-        st.success("MQTT topics updated successfully!")
-    
-    # Notification settings
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📳 Notification Settings")
-    
-    notification_types = {
-        "Security alerts": True,
-        "Temperature warnings": True,
-        "Motion detection": False,
-        "Energy usage reports": True
-    }
-    
-    for alert_type, default in notification_types.items():
-        st.checkbox(alert_type, value=default)
-    
-    # User profiles
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("👤 User Profiles")
-    
-    profiles = ["Admin", "Family Member", "Guest"]
-    selected_profile = st.selectbox("Select profile to edit", profiles)
-    
-    if selected_profile:
-        profile_cols = st.columns(2)
-        with profile_cols[0]:
-            st.text_input("Name", value=selected_profile)
-        with profile_cols[1]:
-            st.selectbox("Access Level", ["Full Access", "Limited Access", "Basic Access"])
-    
-    # Backup and restore
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("💾 Backup & Restore")
-    
-    backup_cols = st.columns(2)
-    with backup_cols[0]:
-        if st.button("Backup Configuration", use_container_width=True):
-            st.success("Configuration backed up successfully!")
-    with backup_cols[1]:
-        if st.button("Restore Configuration", use_container_width=True):
-            st.info("Select a backup file to restore")
-            st.file_uploader("Upload backup file", type=["json"])
-    
-    st.markdown("</div>", unsafe_allow_html=True)
-    
-    # MQTT Message Log
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.subheader("📩 MQTT Message Log")
-    
-    if not st.session_state.mqtt_messages:
-        st.markdown("<p style='color: gray; font-style: italic;'>No MQTT messages received</p>", unsafe_allow_html=True)
-    else:
-        for msg in st.session_state.mqtt_messages[:10]:  # Show only the last 10 messages
-            st.markdown(
-                f"<div class='log-entry' style='border-color: #4299e1;'><b>Topic:</b> {msg['topic']} <br>"
-                f"<b>Payload:</b> {str(msg['payload'])} <br>"
-                f"<span style='color: gray; font-size: 0.8rem;'>{msg['time']}</span></div>",
-                unsafe_allow_html=True
-            )
-    
-    mqtt_cols = st.columns(3)
-    with mqtt_cols[0]:
-        custom_topic = st.text_input("Topic", placeholder="Enter MQTT topic")
-    with mqtt_cols[1]:
-        custom_payload = st.text_input("Payload", placeholder="Enter payload")
-    with mqtt_cols[2]:
-        if st.button("Publish", use_container_width=True):
-            if custom_topic and custom_payload:
-                if publish_mqtt(custom_topic, custom_payload):
-                    st.success(f"Message published to {custom_topic}")
-                else:
-                    st.error("Failed to publish message")
-            else:
-                st.error("Topic and payload are required")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+
+# Activity Log (shown on all tabs)
+st.write("📝 Recent Activity")
+
+if not st.session_state.activity_log:
+    st.write("No recent activity")
+else:
+    for entry in st.session_state.activity_log:
+        st.write(f"{entry['message']} ({entry['time']})")
 
 # Note for users about MQTT
 if not MQTT_AVAILABLE:
@@ -1277,6 +1038,6 @@ if not MQTT_AVAILABLE:
     The dashboard will still function normally without MQTT capabilities.
     """)
 
-# Auto-refresh the app
+# Simulate sensors and auto-refresh the app
 time.sleep(3)  # Wait for 3 seconds
 st.experimental_rerun()
