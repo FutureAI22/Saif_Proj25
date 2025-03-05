@@ -7,6 +7,10 @@ from datetime import datetime
 import paho.mqtt.client as mqtt
 import json
 import threading
+# For WiFi management simulation
+import socket
+from dataclasses import dataclass
+from typing import List, Dict, Optional, Tuple
 
 # Set page config
 st.set_page_config(
@@ -14,6 +18,42 @@ st.set_page_config(
     page_icon="🏠",
     layout="wide"
 )
+
+# WiFi Network Management Class
+@dataclass
+class WifiNetwork:
+    ssid: str
+    signal_strength: int  # 0-100
+    security: str  # WPA, WPA2, WEP, Open
+    connected: bool = False
+
+# WiFi Configuration
+if 'wifi_enabled' not in st.session_state:
+    st.session_state.wifi_enabled = True
+if 'wifi_connected' not in st.session_state:
+    st.session_state.wifi_connected = True
+if 'wifi_ssid' not in st.session_state:
+    st.session_state.wifi_ssid = "Home_Network"
+if 'wifi_password' not in st.session_state:
+    st.session_state.wifi_password = "********"
+if 'wifi_ip' not in st.session_state:
+    st.session_state.wifi_ip = "192.168.1.100"
+if 'wifi_scanning' not in st.session_state:
+    st.session_state.wifi_scanning = False
+if 'wifi_networks' not in st.session_state:
+    # Simulated available networks
+    st.session_state.wifi_networks = [
+        WifiNetwork("Home_Network", 90, "WPA2", True),
+        WifiNetwork("Neighbor_5G", 65, "WPA2"),
+        WifiNetwork("GuestNetwork", 45, "WPA"),
+        WifiNetwork("IoT_Network", 80, "WPA2"),
+        WifiNetwork("CoffeeShop_Free", 25, "Open")
+    ]
+if 'wifi_connection_history' not in st.session_state:
+    st.session_state.wifi_connection_history = [
+        {"time": (datetime.now() - pd.Timedelta(hours=2)).strftime("%H:%M:%S"), "event": "Connected to Home_Network"},
+        {"time": (datetime.now() - pd.Timedelta(minutes=30)).strftime("%H:%M:%S"), "event": "IP Address assigned: 192.168.1.100"}
+    ]
 
 # MQTT Configuration
 if 'mqtt_client' not in st.session_state:
@@ -437,13 +477,119 @@ def update_security_system(new_status):
 if not st.session_state.mqtt_connected:
     connect_mqtt()
 
+# WiFi Functions
+def scan_wifi_networks():
+    """Simulate scanning for WiFi networks"""
+    st.session_state.wifi_scanning = True
+    time.sleep(2)  # Simulate scan time
+    
+    # Update signal strengths with some random variation
+    for network in st.session_state.wifi_networks:
+        # Add some random fluctuation to signal strength
+        signal_change = random.randint(-5, 5)
+        network.signal_strength = max(min(network.signal_strength + signal_change, 100), 5)
+    
+    # Occasionally add or remove a network to simulate dynamic environment
+    if random.random() < 0.3:
+        if random.random() < 0.5 and len(st.session_state.wifi_networks) > 3:
+            # Remove a non-connected network
+            non_connected = [n for n in st.session_state.wifi_networks if not n.connected]
+            if non_connected:
+                st.session_state.wifi_networks.remove(random.choice(non_connected))
+        else:
+            # Add a new network
+            new_ssid = f"Network_{random.randint(1000, 9999)}"
+            new_strength = random.randint(20, 85)
+            security_types = ["WPA2", "WPA", "Open"]
+            new_security = random.choice(security_types)
+            st.session_state.wifi_networks.append(WifiNetwork(new_ssid, new_strength, new_security))
+    
+    st.session_state.wifi_scanning = False
+    add_activity("WiFi network scan completed", "system")
+
+def connect_to_wifi(ssid, password=""):
+    """Simulate connecting to a WiFi network"""
+    # Find the selected network
+    target_network = next((n for n in st.session_state.wifi_networks if n.ssid == ssid), None)
+    if not target_network:
+        add_activity(f"Failed to connect: Network {ssid} not found", "alert")
+        return False
+    
+    # Reset connection status for all networks
+    for network in st.session_state.wifi_networks:
+        network.connected = False
+    
+    # Connect to the selected network
+    target_network.connected = True
+    st.session_state.wifi_connected = True
+    st.session_state.wifi_ssid = ssid
+    
+    # Generate a random IP if connected
+    ip_parts = [192, 168, random.randint(0, 1), random.randint(100, 250)]
+    st.session_state.wifi_ip = ".".join(map(str, ip_parts))
+    
+    # Add to connection history
+    st.session_state.wifi_connection_history.insert(
+        0, 
+        {"time": datetime.now().strftime("%H:%M:%S"), "event": f"Connected to {ssid}"}
+    )
+    st.session_state.wifi_connection_history.insert(
+        0, 
+        {"time": datetime.now().strftime("%H:%M:%S"), "event": f"IP Address assigned: {st.session_state.wifi_ip}"}
+    )
+    
+    # Keep history limited to recent events
+    if len(st.session_state.wifi_connection_history) > 10:
+        st.session_state.wifi_connection_history = st.session_state.wifi_connection_history[:10]
+    
+    add_activity(f"Connected to WiFi network: {ssid}", "system")
+    return True
+
+def disconnect_wifi():
+    """Disconnect from WiFi"""
+    if st.session_state.wifi_connected:
+        # Reset connection status for all networks
+        for network in st.session_state.wifi_networks:
+            network.connected = False
+        
+        st.session_state.wifi_connected = False
+        
+        # Add to connection history
+        st.session_state.wifi_connection_history.insert(
+            0, 
+            {"time": datetime.now().strftime("%H:%M:%S"), "event": f"Disconnected from {st.session_state.wifi_ssid}"}
+        )
+        
+        add_activity(f"Disconnected from WiFi network: {st.session_state.wifi_ssid}", "system")
+        
+        return True
+    return False
+
+def toggle_wifi():
+    """Toggle WiFi on/off"""
+    st.session_state.wifi_enabled = not st.session_state.wifi_enabled
+    
+    if not st.session_state.wifi_enabled:
+        disconnect_wifi()
+        add_activity("WiFi turned off", "system")
+    else:
+        add_activity("WiFi turned on", "system")
+        # Don't auto-connect, let user initiate connection
+
 # Main title bar
 st.title("🏠 Smart Home Dashboard")
 st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>Last updated: {st.session_state.last_update}</p>", unsafe_allow_html=True)
 
-# Display MQTT connection status
+# Display connection statuses
+wifi_status = "🟢 Connected" if st.session_state.wifi_connected else "🔴 Disconnected"
+wifi_details = f" ({st.session_state.wifi_ssid})" if st.session_state.wifi_connected else ""
 mqtt_status = "🟢 Connected" if st.session_state.mqtt_connected else "🔴 Disconnected"
-st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT Status: {mqtt_status}</p>", unsafe_allow_html=True)
+
+status_cols = st.columns(2)
+with status_cols[0]:
+    st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>WiFi Status: {wifi_status}{wifi_details}</p>", unsafe_allow_html=True)
+with status_cols[1]:
+    st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>MQTT Status: {mqtt_status}</p>", unsafe_allow_html=True)
 
 # Update data every 3 seconds
 update_sensors()
@@ -460,7 +606,7 @@ if st.session_state.alerts:
         st.experimental_rerun()
 
 # Create tabs using buttons
-tabs = ["Dashboard", "Security", "Energy", "Irrigation", "Settings"]
+tabs = ["Dashboard", "Security", "Energy", "Irrigation", "WiFi", "Settings"]
 cols = st.columns(len(tabs))
 for i, tab in enumerate(tabs):
     active_class = "tab-button-active" if st.session_state.current_tab == tab else ""
@@ -696,6 +842,156 @@ elif st.session_state.current_tab == "Irrigation":
     st.markdown("</div>", unsafe_allow_html=True)
 
 # Settings tab content
+# WiFi tab content
+elif st.session_state.current_tab == "WiFi":
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("📶 WiFi Networks")
+        
+        # WiFi toggle
+        wifi_toggle_cols = st.columns([3, 2])
+        with wifi_toggle_cols[0]:
+            st.markdown(f"<div class='device-label'>WiFi <span class='sensor-value' style='color: {'green' if st.session_state.wifi_enabled else 'gray'};'>{'Enabled' if st.session_state.wifi_enabled else 'Disabled'}</span></div>", unsafe_allow_html=True)
+        with wifi_toggle_cols[1]:
+            if st.button("Toggle WiFi", key="toggle_wifi", use_container_width=True):
+                toggle_wifi()
+                st.experimental_rerun()
+        
+        if st.session_state.wifi_enabled:
+            # Scan button
+            scan_col1, scan_col2 = st.columns([3, 1])
+            with scan_col2:
+                if st.button("Scan Networks", use_container_width=True):
+                    scan_wifi_networks()
+                    st.experimental_rerun()
+            
+            # Display networks
+            if st.session_state.wifi_scanning:
+                st.info("Scanning for networks...")
+            else:
+                # Sort networks by signal strength
+                sorted_networks = sorted(st.session_state.wifi_networks, key=lambda x: (-x.signal_strength))
+                
+                for i, network in enumerate(sorted_networks):
+                    # Display network details
+                    signal_icon = "📶" if network.signal_strength > 70 else "📶" if network.signal_strength > 40 else "📶"
+                    security_icon = "🔒" if network.security != "Open" else "🔓"
+                    
+                    network_cols = st.columns([3, 1, 1])
+                    with network_cols[0]:
+                        st.markdown(f"""
+                            <div style="display: flex; align-items: center;">
+                                <div style="font-weight: {'bold' if network.connected else 'normal'}; color: {'green' if network.connected else 'black'};">
+                                    {network.ssid} {" (Connected)" if network.connected else ""}
+                                </div>
+                                <div style="margin-left: 10px; color: gray; font-size: 0.8rem;">
+                                    {security_icon} {network.security}
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    
+                    with network_cols[1]:
+                        # Signal strength bar
+                        st.progress(network.signal_strength / 100)
+                    
+                    with network_cols[2]:
+                        if not network.connected:
+                            if st.button("Connect", key=f"connect_{i}", use_container_width=True):
+                                if network.security != "Open":
+                                    # Store the network to connect to after password input
+                                    st.session_state.connect_to_ssid = network.ssid
+                                else:
+                                    # Connect to open network directly
+                                    connect_to_wifi(network.ssid)
+                                st.experimental_rerun()
+                        else:
+                            if st.button("Disconnect", key=f"disconnect_{i}", use_container_width=True):
+                                disconnect_wifi()
+                                st.experimental_rerun()
+                    
+                    if hasattr(st.session_state, 'connect_to_ssid') and st.session_state.connect_to_ssid == network.ssid:
+                        password = st.text_input("Password:", type="password", key=f"pwd_{network.ssid}")
+                        pwd_cols = st.columns([2, 1])
+                        with pwd_cols[1]:
+                            if st.button("Submit", key=f"submit_pwd_{network.ssid}", use_container_width=True):
+                                connect_to_wifi(network.ssid, password)
+                                delattr(st.session_state, 'connect_to_ssid')
+                                st.experimental_rerun()
+                    
+                    st.markdown("<hr style='margin: 5px 0;'>", unsafe_allow_html=True)
+        
+        else:
+            st.info("WiFi is currently disabled. Enable WiFi to scan for networks.")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with col2:
+        # Current connection details
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("📡 Connection Details")
+        
+        if st.session_state.wifi_connected:
+            # Find the connected network
+            connected_network = next((n for n in st.session_state.wifi_networks if n.connected), None)
+            
+            if connected_network:
+                st.markdown(f"""
+                    <div style='margin-bottom: 15px;'>
+                        <div style='font-size: 1.1rem; font-weight: bold;'>{connected_network.ssid}</div>
+                        <div>Security: {connected_network.security}</div>
+                        <div>Signal Strength: {connected_network.signal_strength}%</div>
+                        <div>IP Address: {st.session_state.wifi_ip}</div>
+                        <div>MAC Address: AA:BB:CC:DD:EE:FF</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # Signal strength indicator
+                st.markdown("<div>Signal Strength</div>", unsafe_allow_html=True)
+                st.progress(connected_network.signal_strength / 100)
+                
+                # Disconnect button
+                if st.button("Disconnect", use_container_width=True):
+                    disconnect_wifi()
+                    st.experimental_rerun()
+                
+                # Refresh IP button
+                if st.button("Refresh IP", use_container_width=True):
+                    ip_parts = [192, 168, random.randint(0, 1), random.randint(100, 250)]
+                    st.session_state.wifi_ip = ".".join(map(str, ip_parts))
+                    
+                    # Add to connection history
+                    st.session_state.wifi_connection_history.insert(
+                        0, 
+                        {"time": datetime.now().strftime("%H:%M:%S"), "event": f"IP Address refreshed: {st.session_state.wifi_ip}"}
+                    )
+                    
+                    add_activity(f"IP Address refreshed: {st.session_state.wifi_ip}", "system")
+                    st.experimental_rerun()
+            else:
+                st.info("Connection information not available")
+        else:
+            st.info("Not connected to any WiFi network")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Connection history
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("📜 Connection History")
+        
+        if not st.session_state.wifi_connection_history:
+            st.markdown("<p style='color: gray; font-style: italic;'>No connection history</p>", unsafe_allow_html=True)
+        else:
+            for entry in st.session_state.wifi_connection_history:
+                st.markdown(
+                    f"<div class='log-entry' style='border-color: #4299e1;'>{entry['event']} "
+                    f"<span style='color: gray; font-size: 0.8rem;'>{entry['time']}</span></div>",
+                    unsafe_allow_html=True
+                )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
 elif st.session_state.current_tab == "Settings":
     st.markdown("<div class='card'>", unsafe_allow_html=True)
     st.subheader("⚙️ System Settings")
