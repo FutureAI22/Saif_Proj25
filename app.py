@@ -1,4 +1,43 @@
-randint(20, 23)}:{random.randint(0, 59):02d}, Mode: {'Standby' if random.random() > 0.5 else 'Cooking'}"
+# IoT Devices tab content
+    elif st.session_state.current_tab == "IoT Devices":
+        st.markdown("<div class='card'>", unsafe_allow_html=True)
+        st.subheader("🏠 Smart IoT Devices")
+
+        # Add a refresh button with simulated device status update
+        if st.button("Refresh Devices", key="refresh_iot_devices"):
+            # Simulate device status changes
+            for device in st.session_state.iot_devices:
+                if random.random() < 0.3:  # 30% chance of status change
+                    device['status'] = "Connected" if device['status'] == "Offline" else "Offline"
+                    
+                    # Also randomize some details when status changes
+                    if device['status'] == "Connected":
+                        if device['name'] == "Smart Refrigerator":
+                            device['details'] = f"Temperature: {random.randint(1, 5)}°C, Door: {'Closed' if random.random() > 0.5 else 'Open'}"
+                        elif device['name'] == "Smart Microwave":
+                            device['details'] = f"Last Used: {random.randint(20, 23)}:{random.randint(0, 59):02d}, Mode: {'Standby' if random.random() > 0.5 else 'Cooking'}"
+                        elif device['name'] == "Smart Oven":
+                            device['details'] = f"Temperature: {random.randint(150, 220)}°C, Mode: {'Bake' if random.random() > 0.5 else 'Roast'}"
+                        elif device['name'] == "Smart Dishwasher":
+                            device['details'] = f"Cycle: {'Drying' if random.random() > 0.5 else 'Washing'}, Remaining: {random.randint(10, 30)} min"
+
+        # Display IoT devices
+        for device in st.session_state.iot_devices:
+            # Determine status color
+            status_color = "green" if device["status"] == "Connected" else "red"
+            
+            # Create device card
+            st.markdown(f"""
+            <div class='wifi-network'>
+                <div>
+                    <b>{device['icon']} {device['name']}</b>
+                    <span style='color: {status_color}; margin-left: 10px;'>{device['status']}</span>
+                    <p style='color: gray; margin: 5px 0;'>{device['details']}</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)                            randint(20, 23)}:{random.randint(0, 59):02d}, Mode: {'Standby' if random.random() > 0.5 else 'Cooking'}"
 
         # Display IoT devices
         for device in st.session_state.iot_devices:
