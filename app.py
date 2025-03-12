@@ -720,7 +720,7 @@ else:
         weather_data = [
             {"day": "Today", "icon": "☀️", "temp": "24°C", "precip": "0%"},
             {"day": "Tomorrow", "icon": "⛅", "temp": "22°C", "precip": "10%"},
-            {"day": "Day 3", "icon": "🌧️", "temp": "19°C", "precip": "60%"},
+            {"day": "Day 3", "icon": "🌧️", "temp": "19°C", "precip": "60%"}
         ]
         
         weather_cols = st.columns(len(weather_data))
