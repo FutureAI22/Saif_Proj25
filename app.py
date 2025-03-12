@@ -240,6 +240,13 @@ def update_sensors():
 
 # Main dashboard content
 def main_dashboard():
+    # Add logout button at the top right
+    logout_col1, logout_col2 = st.columns([4, 1])
+    with logout_col2:
+        if st.button("Logout", key="main_logout"):
+            st.session_state.logged_in = False
+            st.experimental_rerun()
+
     # Main title bar
     st.title("🏠 Smart Home Dashboard")
     st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>Last updated: {st.session_state.last_update}</p>", unsafe_allow_html=True)
@@ -550,8 +557,12 @@ def main_dashboard():
             </div>
             """, unsafe_allow_html=True)
 
-        # Add a refresh button
+        # Add a refresh button with simulated device status update
         if st.button("Refresh Devices", key="refresh_iot_devices"):
+            # Simulate device status changes
+            for device in iot_devices:
+                if random.random() < 0.3:  # 30% chance of status change
+                    device['status'] = "Connected" if device['status'] == "Offline" else "Offline"
             st.experimental_rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
