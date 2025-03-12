@@ -1,5 +1,4 @@
-</div>
-            """, unsafe_allow_html=True)
+allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -160,7 +159,7 @@ if 'irrigation_zones' not in st.session_state:
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = "Dashboard"
 
-# New IoT devices in session state
+# Initialize IoT devices
 if 'iot_devices' not in st.session_state:
     st.session_state.iot_devices = [
         {
@@ -365,3 +364,5 @@ def main_dashboard():
                     <span style='color: {status_color}; margin-left: 10px;'>{device['status']}</span>
                     <p style='color: gray; margin: 5px 0;'>{device['details']}</p>
                 </div>
+            </div>
+            """, unsafe
