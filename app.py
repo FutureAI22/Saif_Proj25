@@ -501,8 +501,9 @@ def main_dashboard():
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         st.subheader("🏠 Smart IoT Devices")
 
-        # Define IoT devices with their connection status and additional details
-        iot_devices = [
+    # Initialize IoT devices in session state if not already present
+    if 'iot_devices' not in st.session_state:
+        st.session_state.iot_devices = [
             {
                 "name": "Smart Refrigerator",
                 "status": "Connected",
