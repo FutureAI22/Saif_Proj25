@@ -240,10 +240,10 @@ def update_sensors():
 
 # Main dashboard content
 def main_dashboard():
-    # Add logout button at the top right
-    logout_col1, logout_col2 = st.columns([4, 1])
-    with logout_col2:
-        if st.button("Logout", key="main_logout"):
+    # Logout button and title row
+    col1, col2, col3 = st.columns([3, 2, 1])
+    with col3:
+        if st.button("Logout", key="main_logout", use_container_width=True):
             st.session_state.logged_in = False
             st.experimental_rerun()
 
@@ -576,11 +576,6 @@ def main():
 
     # Render main dashboard
     main_dashboard()
-
-    # Add logout button to sidebar
-    if st.sidebar.button("Logout"):
-        st.session_state.logged_in = False
-        st.experimental_rerun()
 
 # Run the main app
 if __name__ == "__main__":
