@@ -562,85 +562,7 @@ else:
             
             st.markdown("</div>", unsafe_allow_html=True)
     
-    # WiFi tab with IoT devices (instead of networks)
-    elif st.session_state.current_tab == "WiFi":
-        st.markdown("<div class='card'>", unsafe_allow_html=True)
-        st.subheader("📶 Connected IoT Devices")
-        
-        # Add an 'add device' button at the top
-        if st.button("Scan for New Devices", key="scan_devices"):
-            add_activity("Scanning for new IoT devices...", "iot")
-        
-        # Create a filter for device categories
-        categories = ["All Devices", "Kitchen Appliances", "Entertainment", "Security", "Climate Control"]
-        selected_category = st.selectbox("Filter by category:", categories)
-        
-        # Display IoT devices in a grid
-        col1, col2 = st.columns(2)
-        
-        # Divide devices between the two columns
-        devices_list = list(st.session_state.iot_devices.items())
-        devices_col1 = devices_list[:len(devices_list)//2]
-        devices_col2 = devices_list[len(devices_list)//2:]
-        
-        # Display devices in first column
-        with col1:
-            for device_id, device in devices_col1:
-                # Device card
-                status_class = "iot-connected" if device['status'] == 'connected' else "iot-disconnected"
-                st.markdown(f"<div class='iot-device {status_class}'>", unsafe_allow_html=True)
-                
-                # Device name and status
-                status_color = "green" if device['status'] == 'connected' else "red"
-                st.markdown(f"<div class='iot-name'>{device['name']}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='iot-status'>Status: <span style='color: {status_color};'>{device['status'].capitalize()}</span></div>", unsafe_allow_html=True)
-                
-                # Signal strength
-                if device['status'] == 'connected':
-                    st.markdown(f"<div class='iot-status'>Signal: {device['signal']}%</div>", unsafe_allow_html=True)
-                    # Battery level if applicable
-                    if device['battery'] is not None:
-                        st.markdown(f"<div class='iot-status'>Battery: {device['battery']}</div>", unsafe_allow_html=True)
-                    
-                    st.markdown(f"<div class='iot-status'>Last active: {device['last_active']}</div>", unsafe_allow_html=True)
-                
-                # Device features as tags
-                st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True)
-                for feature in device['features']:
-                    st.markdown(f"<span class='iot-feature'>{feature}</span>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Action buttons
-                button_cols = st.columns([1, 1])
-                with button_cols[0]:
-                    if st.button("Toggle Power", key=f"toggle_{device_id}", use_container_width=True):
-                        toggle_iot_device(device_id)
-                with button_cols[1]:
-                    if st.button("Settings", key=f"settings_{device_id}", use_container_width=True):
-                        add_activity(f"Opening settings for {device['name']}", "iot")
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Display devices in second column
-        with col2:
-            for device_id, device in devices_col2:
-                # Device card
-                status_class = "iot-connected" if device['status'] == 'connected' else "iot-disconnected"
-                st.markdown(f"<div class='iot-device {status_class}'>", unsafe_allow_html=True)
-                
-                # Device name and status
-                status_color = "green" if device['status'] == 'connected' else "red"
-                st.markdown(f"<div class='iot-name'>{device['name']}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='iot-status'>Status: <span style='color: {status_color};'>{device['status'].capitalize()}</span></div>", unsafe_allow_html=True)
-                
-                # Signal strength
-                if device['status'] == 'connected':
-                    st.markdown(f"<div class='iot-status'>Signal: {device['signal']}%</div>", unsafe_allow_html=True)
-                    # Battery level if applicable
-                    if device['battery'] is not None:
-                        st.markdown(f"<div class='iot-status'>Battery: {device['battery']}</div>", unsafe_allow_html=True)
-                    
-                    st.markdown(f"<div class='iot-status'>Last active: {device['last_active']}</div>", unsafe_allow_html=True)
+_allow_html=True)
                 
                 # Device features as tags
                 st.markdown("<div style='margin-top: 10px;'>", unsafe_allow_html=True)
@@ -698,14 +620,14 @@ else:
             with zone_cols[0]:
                 st.markdown(f"Schedule: {data['schedule']}, Duration: {data['duration']} min")
             with zone_cols[1]:
-                new_schedule = st.time_input(f"New time", label_visibility="collapsed", key=f"time_{zone}")
+                new_schedule = st.time_input("New time", label_visibility="collapsed", key=f"time_{zone}")
                 new_schedule_str = new_schedule.strftime("%I:%M %p")
             with zone_cols[2]:
-                new_duration = st.number_input(f"Duration (min)", min_value=5, max_value=60, value=data['duration'], step=5, label_visibility="collapsed", key=f"duration_{zone}")
+                new_duration = st.number_input("Duration (min)", min_value=5, max_value=60, value=data['duration'], step=5, label_visibility="collapsed", key=f"duration_{zone}")
             
             control_cols = st.columns([3, 1, 1])
             with control_cols[0]:
-                st.markdown(f"<div style='height: 5px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
             with control_cols[1]:
                 if st.button("Update Schedule", key=f"update_{zone}", use_container_width=True):
                     update_irrigation_schedule(zone, new_schedule_str, new_duration)
