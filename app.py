@@ -549,7 +549,7 @@ def main_dashboard():
         if st.button("Refresh Devices", key="refresh_iot_devices"):
             # Simulate device status changes
             for device in iot_devices:
-                if random.random() < 0.3:  # 30% chance of status change
+                if random.random() < 0.7:  # 30% chance of status change
                     device['status'] = "Connected" if device['status'] == "Offline" else "Offline"
             st.experimental_rerun()
 
