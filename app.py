@@ -21,7 +21,7 @@ def check_login(username, password):
 
 # Login Page
 def login_page():
-    st.title("🏠 Smart Home Dashboard Login")
+    st.title("🏠 Smart Home Login")
     
     # Custom CSS for larger font and centered layout
     st.markdown("""
@@ -52,7 +52,7 @@ def login_page():
 
 # Set page config
 st.set_page_config(
-    page_title="Smart Home Dashboard",
+    page_title="Smart Home Panel",
     page_icon="🏠",
     layout="wide"
 )
