@@ -36,20 +36,10 @@ def login_page():
     .stTextInput>div>div>input {
         font-size: 18px !important;
     }
-    .login-container {
-        max-width: 400px;
-        margin: auto;
-        padding: 20px;
-        background-color: white;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
     </style>
     """, unsafe_allow_html=True)
     
-    # Login container
-    st.markdown("<div class='login-container'>", unsafe_allow_html=True)
-    
+    # Input fields directly without container
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     
@@ -59,8 +49,6 @@ def login_page():
             st.experimental_rerun()
         else:
             st.error("Invalid username or password")
-    
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # Set page config
 st.set_page_config(
