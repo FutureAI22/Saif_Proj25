@@ -544,14 +544,8 @@ def main_dashboard():
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
-        # Add a refresh button with simulated device status update
-        if st.button("Refresh Devices", key="refresh_iot_devices"):
-            # Simulate device status changes
-            for device in iot_devices:
-                if random.random() < 0.7:  # 30% chance of status change
-                    device['status'] = "Connected" if device['status'] == "Offline" else "Offline"
-            st.experimental_rerun()
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
