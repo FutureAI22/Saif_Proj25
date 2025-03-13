@@ -21,7 +21,7 @@ def check_login(username, password):
 
 # Login Page
 def login_page():
-    st.title("🏠 Smart Home Login")
+    st.title("🏠 Smart Home Control Panel Login")
     
     # Custom CSS for larger font and centered layout
     st.markdown("""
@@ -52,7 +52,7 @@ def login_page():
 
 # Set page config
 st.set_page_config(
-    page_title="Smart Home Panel",
+    page_title="Smart Home Control Panel",
     page_icon="🏠",
     layout="wide"
 )
@@ -236,7 +236,7 @@ def main_dashboard():
             st.experimental_rerun()
 
     # Main title bar
-    st.title("🏠 Smart Home Dashboard")
+    st.title("🏠 Smart Home Control Panel")
     st.markdown(f"<p style='text-align: right; color: gray; font-size: 0.8rem;'>Last updated: {st.session_state.last_update}</p>", unsafe_allow_html=True)
 
     # Update data every time the page is loaded
